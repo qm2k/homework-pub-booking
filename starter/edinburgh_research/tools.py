@@ -15,7 +15,10 @@ The grader checks for:
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
+
+import more_itertools
 
 from sovereign_agent.session.directory import Session
 from sovereign_agent.tools.registry import ToolRegistry, ToolResult, _RegisteredTool
@@ -26,6 +29,7 @@ from .integrity import record_tool_call
 _SAMPLE_DATA = Path(__file__).parent / "sample_data"
 _VENUES_FILE = _SAMPLE_DATA / "venues.json"
 _WEATHER_FILE = _SAMPLE_DATA / "weather.json"
+_CATERING_FILE = _SAMPLE_DATA / "catering.json"
 _ERR_MISSING = "SA_TOOL_DEPENDENCY_MISSING"
 _ERR_EXECUTION_FAILED = "SA_TOOL_EXECUTION_FAILED"
 _ERR_INVALID_INPUT = "SA_TOOL_INVALID_INPUT"
@@ -181,8 +185,102 @@ def get_weather(city: str, date: str) -> ToolResult:
 
 
 # ---------------------------------------------------------------------------
-# TODO 3 — calculate_cost
+# calculate_cost
 # ---------------------------------------------------------------------------
+def _get_deposit_policy_key(*, total: float) -> str:
+    """Map the total cost to the corresponding deposit policy tier."""
+    if total < 300:
+        return "under_gbp_300"
+    if total <= 1000:
+        return "gbp_300_to_1000"
+    return "over_gbp_1000"
+
+
+def _get_deposit_factor(*, policy_value: str) -> float:
+    """Convert a deposit policy string value to a numeric multiplier."""
+    if policy_value == "deposit_20_percent":
+        return 0.20
+    if policy_value == "deposit_30_percent":
+        return 0.30
+    if policy_value == "no_deposit_required":
+        return 0.0
+    raise ValueError(f"Unknown deposit policy value: {policy_value}")
+
+
+def _calculate_deposit_required(*, total: float, deposit_policy: dict) -> float:
+    """Calculate the required deposit based on total cost and policy rules."""
+    policy_key = _get_deposit_policy_key(total=total)
+    policy_value = deposit_policy[policy_key]
+    factor = _get_deposit_factor(policy_value=policy_value)
+    return total * factor
+
+
+def _calculate_cost_impl(
+    *,
+    venue_id: str,
+    party_size: int,
+    duration_hours: int,
+    catering_tier: str
+) -> ToolResult:
+    """Implement cost calculation logic.
+    
+    Raises ValueError if venue_id is not found, KeyError if catering_tier
+    is invalid. These are caught by the wrapper and converted to SA_TOOL_INVALID_INPUT.
+    """
+    with open(_CATERING_FILE, "r") as file_handle:
+        catering_data = json.load(file_handle)
+
+    with open(_VENUES_FILE, "r") as file_handle:
+        venues_data = json.load(file_handle)
+
+    # Use more_itertools.one to ensure exactly one venue matches; raises ValueError otherwise
+    venue = more_itertools.one(v for v in venues_data if v["id"] == venue_id)
+
+    base_rates = catering_data["base_rates_gbp_per_head"]
+    # Raises KeyError if catering_tier is not valid
+    base_per_head = base_rates[catering_tier]
+        
+    # Assume 1.0 multiplier if venue not explicitly listed in modifiers
+    venue_mult = catering_data["venue_modifiers"].get(venue_id, 1.0)
+    
+    subtotal = base_per_head * venue_mult * party_size * max(1, duration_hours)
+    service = subtotal * catering_data["service_charge_percent"] / 100
+    
+    hire_fee = venue["hire_fee_gbp"]
+    min_spend = venue["min_spend_gbp"]
+    
+    total = subtotal + service + hire_fee + min_spend
+    
+    deposit_policy = catering_data["deposit_policy"]
+    deposit_required = _calculate_deposit_required(
+        total=total, 
+        deposit_policy=deposit_policy
+    )
+
+    # Use math.ceil to round up unrounded values at the very end
+    total_int = math.ceil(total)
+    subtotal_int = math.ceil(subtotal)
+    service_int = math.ceil(service)
+    deposit_required_int = math.ceil(deposit_required)
+
+    output = dict(
+        venue_id=venue_id,
+        party_size=party_size,
+        duration_hours=duration_hours,
+        catering_tier=catering_tier,
+        subtotal_gbp=subtotal_int,
+        service_gbp=service_int,
+        total_gbp=total_int,
+        deposit_required_gbp=deposit_required_int,
+    )
+    
+    return ToolResult(
+        success=True,
+        output=output,
+        summary=f"calculate_cost(venue_id={venue_id!r}, party_size={party_size}, duration_hours={duration_hours}, catering_tier={catering_tier!r}): total £{total_int}, deposit £{deposit_required_int}"
+    )
+
+
 def calculate_cost(
     venue_id: str,
     party_size: int,
@@ -210,11 +308,37 @@ def calculate_cost(
         "total_gbp": int,
         "deposit_required_gbp": int,
       }
-      summary: "calculate_cost(<venue>, <party>): total £<N>, deposit £<M>"
+      summary: "calculate_cost(venue_id='<venue>', party_size=<party_size>, duration_hours=<duration_hours>, catering_tier='<tier>'): total £<N>, deposit £<M>"
 
     MUST call record_tool_call(...) before returning.
     """
-    raise NotImplementedError("TODO 3: implement calculate_cost")
+    try:
+        result = _calculate_cost_impl(
+            venue_id=venue_id,
+            party_size=party_size,
+            duration_hours=duration_hours,
+            catering_tier=catering_tier
+        )
+        
+        record_tool_call(
+            tool_name="calculate_cost",
+            arguments=dict(
+                venue_id=venue_id,
+                party_size=party_size,
+                duration_hours=duration_hours,
+                catering_tier=catering_tier
+            ),
+            output=result.output
+        )
+        
+        return result
+    except (ValueError, KeyError) as exception:
+        # Invalid venue_id or catering_tier mapped to specific invalid input error
+        raise ToolError(_ERR_INVALID_INPUT, message=str(exception)) from exception
+    except FileNotFoundError as exception:
+        raise ToolError(_ERR_MISSING, message=str(exception)) from exception
+    except Exception as exception:
+        raise ToolError(_ERR_EXECUTION_FAILED, message=str(exception)) from exception
 
 
 # ---------------------------------------------------------------------------
