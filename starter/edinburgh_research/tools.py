@@ -14,8 +14,10 @@ The grader checks for:
 
 from __future__ import annotations
 
+import html
 import json
 import math
+import string
 from pathlib import Path
 
 import more_itertools
@@ -30,6 +32,7 @@ _SAMPLE_DATA = Path(__file__).parent / "sample_data"
 _VENUES_FILE = _SAMPLE_DATA / "venues.json"
 _WEATHER_FILE = _SAMPLE_DATA / "weather.json"
 _CATERING_FILE = _SAMPLE_DATA / "catering.json"
+_FLYER_TEMPLATE = Path(__file__).parent / "flyer_template.html"
 _ERR_MISSING = "SA_TOOL_DEPENDENCY_MISSING"
 _ERR_EXECUTION_FAILED = "SA_TOOL_EXECUTION_FAILED"
 _ERR_INVALID_INPUT = "SA_TOOL_INVALID_INPUT"
@@ -342,10 +345,10 @@ def calculate_cost(
 
 
 # ---------------------------------------------------------------------------
-# TODO 4 — generate_flyer
+# generate_flyer
 # ---------------------------------------------------------------------------
 def generate_flyer(session: Session, event_details: dict) -> ToolResult:
-    """Produce an HTML flyer and write it to workspace/flyer.html.
+    """Produce an HTML flyer and write it to session.workspace_dir / "flyer.html".
 
     event_details is expected to contain at least:
       venue_name, venue_address, date, time, party_size, condition,
@@ -358,7 +361,7 @@ def generate_flyer(session: Session, event_details: dict) -> ToolResult:
 
     Returns:
       output: {"path": "workspace/flyer.html", "bytes_written": int}
-      summary: "generate_flyer: wrote <path> (<N> chars)"
+      summary: "generate_flyer: wrote <path> (<N> bytes)"
 
     MUST call record_tool_call(...) before returning — the integrity
     check compares the flyer's contents against earlier tool outputs.
@@ -366,7 +369,43 @@ def generate_flyer(session: Session, event_details: dict) -> ToolResult:
     IMPORTANT: this tool MUST be registered with parallel_safe=False
     because it writes a file.
     """
-    raise NotImplementedError("TODO 4: implement generate_flyer")
+    try:
+        escaped_details = {
+            key: html.escape(str(value)) 
+            for key, value in event_details.items()
+        }
+
+        template_content = _FLYER_TEMPLATE.read_text(encoding="utf-8")
+        html_content = string.Template(template_content).substitute(escaped_details)
+
+        flyer_path = session.workspace_dir / "flyer.html"
+        flyer_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        flyer_path.write_text(html_content, encoding="utf-8")
+        bytes_written = flyer_path.stat().st_size
+            
+        output = dict(
+            path=str(flyer_path),
+            bytes_written=bytes_written
+        )
+
+        record_tool_call(
+            tool_name="generate_flyer",
+            arguments=dict(event_details=event_details),
+            output=output
+        )
+        
+        return ToolResult(
+            success=True,
+            output=output,
+            summary=f"generate_flyer: wrote {flyer_path} ({bytes_written} bytes)"
+        )
+    except KeyError as exception:
+        raise ToolError(_ERR_EXECUTION_FAILED, message=f"Missing key in event_details: {exception}") from exception
+    except FileNotFoundError as exception:
+        raise ToolError(_ERR_MISSING, message=str(exception)) from exception
+    except Exception as exception:
+        raise ToolError(_ERR_EXECUTION_FAILED, message=str(exception)) from exception
 
 
 # ---------------------------------------------------------------------------

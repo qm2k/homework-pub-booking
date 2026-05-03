@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Event Flyer</title>
+<style>
+  body { font-family: sans-serif; padding: 20px; }
+  article { max-width: 600px; margin: 0 auto; background: #f9f9f9; padding: 20px; border-radius: 8px; }
+  h1 { color: #333; }
+  dl { display: grid; grid-template-columns: max-content auto; gap: 10px 20px; }
+  dt { font-weight: bold; }
+</style>
+</head>
+<body>
+  <article>
+    <h1 data-testid="venue_name">$venue_name</h1>
+    <dl>
+      <dt>Address</dt><dd data-testid="venue_address">$venue_address</dd>
+      <dt>Date</dt><dd data-testid="date">$date</dd>
+      <dt>Time</dt><dd data-testid="time">$time</dd>
+      <dt>Party Size</dt><dd data-testid="party_size">$party_size</dd>
+      <dt>Weather</dt><dd>
+        <span data-testid="condition">$condition</span>,
+        <span data-testid="temperature_c">$temperature_c</span>
+      </dd>
+      <dt>Total Cost</dt><dd data-testid="total_gbp">£$total_gbp</dd>
+      <dt>Deposit Required</dt><dd data-testid="deposit_required_gbp">£$deposit_required_gbp</dd>
+    </dl>
+  </article>
+</body>
+</html>
