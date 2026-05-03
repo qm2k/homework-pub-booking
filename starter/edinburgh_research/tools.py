@@ -25,8 +25,10 @@ from .integrity import record_tool_call
 
 _SAMPLE_DATA = Path(__file__).parent / "sample_data"
 _VENUES_FILE = _SAMPLE_DATA / "venues.json"
+_WEATHER_FILE = _SAMPLE_DATA / "weather.json"
 _ERR_MISSING = "SA_TOOL_DEPENDENCY_MISSING"
 _ERR_EXECUTION_FAILED = "SA_TOOL_EXECUTION_FAILED"
+_ERR_INVALID_INPUT = "SA_TOOL_INVALID_INPUT"
 
 # ---------------------------------------------------------------------------
 # venue_search
@@ -106,21 +108,76 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
 
 
 # ---------------------------------------------------------------------------
-# TODO 2 — get_weather
+# get_weather
 # ---------------------------------------------------------------------------
+def _get_weather_impl(*, city: str, date: str) -> ToolResult:
+    """Implement weather lookup logic with early error returns."""
+    with open(_WEATHER_FILE, "r") as file_handle:
+        weather_data = json.load(file_handle)
+        
+    city_folded = city.casefold()
+    
+    if city_folded not in weather_data:
+        return ToolResult(
+            success=False,
+            output=dict(error="City not found", city=city),
+            summary=f"get_weather(city={city!r}, date={date!r}): City not found",
+            error=ToolError(_ERR_INVALID_INPUT)
+        )
+        
+    city_weather = weather_data[city_folded]
+    
+    if date not in city_weather:
+        return ToolResult(
+            success=False,
+            output=dict(error="Date not found", city=city, date=date),
+            summary=f"get_weather(city={city!r}, date={date!r}): Date not found",
+            error=ToolError(_ERR_INVALID_INPUT)
+        )
+        
+    day_weather = city_weather[date]
+    
+    output = dict(
+        city=city,
+        date=date,
+        **day_weather
+    )
+    
+    condition = day_weather["condition"]
+    temperature_c = day_weather["temperature_c"]
+    
+    return ToolResult(
+        success=True,
+        output=output,
+        summary=f"get_weather(city={city!r}, date={date!r}): {condition}, {temperature_c}C"
+    )
+
 def get_weather(city: str, date: str) -> ToolResult:
     """Look up the scripted weather for <city> on <date> (YYYY-MM-DD).
 
     Reads sample_data/weather.json. Returns:
       output: {"city": str, "date": str, "condition": str, "temperature_c": int, ...}
-      summary: "get_weather(<city>, <date>): <condition>, <temp>C"
+      summary: "get_weather(city='<city>', date='<date>'): <condition>, <temp>C"
 
     If the city or date is not in the fixture, return success=False with
     a clear ToolError (SA_TOOL_INVALID_INPUT). Do NOT raise.
 
     MUST call record_tool_call(...) before returning.
     """
-    raise NotImplementedError("TODO 2: implement get_weather")
+    try:
+        result = _get_weather_impl(city=city, date=date)
+        
+        record_tool_call(
+            tool_name="get_weather",
+            arguments=dict(city=city, date=date),
+            output=result.output
+        )
+        
+        return result
+    except FileNotFoundError as exception:
+        raise ToolError(_ERR_MISSING, message=str(exception)) from exception
+    except Exception as exception:
+        raise ToolError(_ERR_EXECUTION_FAILED, message=str(exception)) from exception
 
 
 # ---------------------------------------------------------------------------
