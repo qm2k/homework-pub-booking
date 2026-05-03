@@ -14,17 +14,40 @@ The grader checks for:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from sovereign_agent.session.directory import Session
 from sovereign_agent.tools.registry import ToolRegistry, ToolResult, _RegisteredTool
+from sovereign_agent.errors import ToolError
+
+from .integrity import record_tool_call
 
 _SAMPLE_DATA = Path(__file__).parent / "sample_data"
-
+_VENUES_FILE = _SAMPLE_DATA / "venues.json"
+_ERR_MISSING = "SA_TOOL_DEPENDENCY_MISSING"
+_ERR_EXECUTION_FAILED = "SA_TOOL_EXECUTION_FAILED"
 
 # ---------------------------------------------------------------------------
-# TODO 1 — venue_search
+# venue_search
 # ---------------------------------------------------------------------------
+def _venue_search_filter(*, venue: dict, near_folded: str, party_size: int, budget_max_gbp: int) -> bool:
+    """Evaluate if a venue meets the search criteria.
+    
+    Checks if the venue is open, located in the specified area (case-insensitive),
+    has enough seats, and fits within the given maximum budget.
+    """
+    if not venue["open_now"]:
+        return False
+    if near_folded not in venue["area"].casefold():
+        return False
+    if venue["seats_available_evening"] < party_size:
+        return False
+    if venue["hire_fee_gbp"] + venue["min_spend_gbp"] > budget_max_gbp:
+        return False
+    return True
+
+
 def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> ToolResult:
     """Search for Edinburgh venues near <near> that can seat the party.
 
@@ -36,14 +59,50 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
 
     Returns a ToolResult with:
       output: {"near": ..., "party_size": ..., "results": [<venue dicts>], "count": int}
-      summary: "venue_search(<near>, party=<N>): <count> result(s)"
+      summary: "venue_search(near='<near>', party_size=<party_size>, budget_max_gbp=<budget_max_gbp>): <count> result(s)"
 
     MUST call record_tool_call(...) before returning so the integrity
     check can see what data was produced.
     """
-    # TODO 1a: load venues.json. Raise ToolError(SA_TOOL_DEPENDENCY_MISSING)
-    #          if the file is absent.
-    raise NotImplementedError("TODO 1: implement venue_search")
+    try:
+        with open(_VENUES_FILE, "r") as file_handle:
+            venues = json.load(file_handle)
+
+        # Pre-fold the search string for efficient case-insensitive comparison in the loop
+        near_folded = near.casefold()
+        
+        results = [
+            venue for venue in venues 
+            if _venue_search_filter(
+                venue=venue, 
+                near_folded=near_folded, 
+                party_size=party_size, 
+                budget_max_gbp=budget_max_gbp
+            )
+        ]
+        
+        output = dict(
+            near=near,
+            party_size=party_size,
+            results=results,
+            count=len(results)
+        )
+        
+        record_tool_call(
+            tool_name="venue_search",
+            arguments=dict(near=near, party_size=party_size, budget_max_gbp=budget_max_gbp),
+            output=output
+        )
+        
+        return ToolResult(
+            success=True,
+            output=output,
+            summary=f"venue_search(near={near!r}, party_size={party_size}, budget_max_gbp={budget_max_gbp}): {len(results)} result(s)"
+        )
+    except FileNotFoundError as exception:
+        raise ToolError(_ERR_MISSING, message=str(exception)) from exception
+    except Exception as exception:
+        raise ToolError(_ERR_EXECUTION_FAILED, message=str(exception)) from exception
 
 
 # ---------------------------------------------------------------------------
