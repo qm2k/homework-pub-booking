@@ -129,7 +129,7 @@ def _get_weather_impl(*, city: str, date: str) -> ToolResult:
             success=False,
             output=dict(error="City not found", city=city),
             summary=f"get_weather(city={city!r}, date={date!r}): City not found",
-            error=ToolError(_ERR_INVALID_INPUT)
+            error=ToolError(_ERR_INVALID_INPUT, message="City not found")
         )
         
     city_weather = weather_data[city_folded]
@@ -139,7 +139,7 @@ def _get_weather_impl(*, city: str, date: str) -> ToolResult:
             success=False,
             output=dict(error="Date not found", city=city, date=date),
             summary=f"get_weather(city={city!r}, date={date!r}): Date not found",
-            error=ToolError(_ERR_INVALID_INPUT)
+            error=ToolError(_ERR_INVALID_INPUT, message="Date not found")
         )
         
     day_weather = city_weather[date]
