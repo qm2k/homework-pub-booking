@@ -223,10 +223,12 @@ async def run_scenario(real: bool) -> int:
         print(f"Session {session.session_id}")
         print(f"  dir: {session.directory}")
 
-        if real:
-            from sovereign_agent.config import Config
+        from sovereign_agent.config import Config
+        from sovereign_agent.orchestrator.main import Orchestrator
 
+        if real:
             cfg = Config.from_env()
+            cfg.sessions_dir = sessions_root
             print(f"  LLM: {cfg.llm_base_url} (live)")
             print(f"  planner:  {cfg.llm_planner_model}")
             print(f"  executor: {cfg.llm_executor_model}")
@@ -234,22 +236,26 @@ async def run_scenario(real: bool) -> int:
                 base_url=cfg.llm_base_url,
                 api_key_env=cfg.llm_api_key_env,
             )
-            planner_model = cfg.llm_planner_model
-            executor_model = cfg.llm_executor_model
         else:
             print("  LLM: FakeLLMClient (offline, scripted)")
             client = _build_fake_client()
-            planner_model = executor_model = "fake"
+            cfg = Config(
+                sessions_dir=sessions_root,
+                llm_planner_model="fake",
+                llm_executor_model="fake",
+            )
 
-        tools = build_tool_registry(session)
-        half = LoopHalf(
-            planner=DefaultPlanner(model=planner_model, client=client),
-            executor=DefaultExecutor(model=executor_model, client=client, tools=tools),  # type: ignore[arg-type]
+        extra_tools = build_tool_registry(session, include_builtins=False)
+
+        orchestrator = Orchestrator(
+            config=cfg,
+            llm_client=client,
+            extra_tools=extra_tools,
         )
-
-        result = await half.run(session, {"task": "research Edinburgh venue and write flyer"})
-        print(f"\nLoop half outcome: {result.next_action}")
-        print(f"  summary: {result.summary}")
+        await orchestrator.process_session(session.session_id)
+        
+        session.reload_state()
+        print(f"\nOrchestrator pass complete. Session state: {session.state.state}")
 
         print("\nTickets:")
         for t in list_tickets(session):
