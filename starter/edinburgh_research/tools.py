@@ -432,7 +432,10 @@ def build_tool_registry(session: Session) -> ToolRegistry:
             parameters_schema={
                 "type": "object",
                 "properties": {
-                    "near": {"type": "string"},
+                    "near": {
+                        "type": "string",
+                        "description": "Keyword search for the area (e.g., 'Haymarket'). Performs a strict substring match. Do not include full phrases or extra words like 'station'."
+                    },
                     "party_size": {"type": "integer"},
                     "budget_max_gbp": {"type": "integer", "default": 1000},
                 },
