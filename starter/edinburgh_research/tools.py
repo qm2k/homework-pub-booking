@@ -523,7 +523,26 @@ def build_tool_registry(session: Session) -> ToolRegistry:
             fn=_flyer_adapter,
             parameters_schema={
                 "type": "object",
-                "properties": {"event_details": {"type": "object"}},
+                "properties": {
+                    "event_details": {
+                        "type": "object",
+                        "properties": {
+                            "venue_name": {"type": "string"},
+                            "venue_address": {"type": "string"},
+                            "date": {"type": "string"},
+                            "time": {"type": "string"},
+                            "party_size": {"type": "integer"},
+                            "condition": {"type": "string"},
+                            "temperature_c": {"type": "number"},
+                            "total_gbp": {"type": "number"},
+                            "deposit_required_gbp": {"type": "number"},
+                        },
+                        "required": [
+                            "venue_name", "venue_address", "date", "time", "party_size",
+                            "condition", "temperature_c", "total_gbp", "deposit_required_gbp"
+                        ]
+                    }
+                },
                 "required": ["event_details"],
             },
             returns_schema={"type": "object"},
