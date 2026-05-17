@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import httpx
 import json
 import os
 import subprocess
@@ -93,29 +94,34 @@ class RasaStructuredHalf(StructuredHalf):
             )
 
         booking = rasa_msg["metadata"]["booking"]
-        # TODO: Construct the request body using `rasa_msg`. It needs to be a JSON string encoded as utf-8.
-        # Ensure you include 'sender', 'message', and 'metadata' containing 'booking'.
 
-        # TODO: Create a urllib_request.Request object pointing to `self.rasa_url`, with the encoded body.
-        # Make sure to set the Content-Type header to application/json and method to POST.
+        # Construct the request body using `rasa_msg`.
+        request_data = dict(
+                sender=rasa_msg['sender'],
+                message=rasa_msg['message'],
+                metadata=dict(booking=booking),
+            )
 
-        # We execute the blocking urllib call in a thread pool for async compatibility
         try:
-            # TODO: Execute the request using `urllib_request.urlopen` in a lambda passed to run_in_executor.
-            # Use `self.request_timeout_s` as the timeout.
-            raise NotImplementedError("TODO: Implement HTTP POST to Rasa")
-        except HTTPError as e:
+            async with httpx.AsyncClient() as http_client:
+                response_object = await http_client.post(
+                        self.rasa_url,
+                        json=request_data,
+                        timeout=self.request_timeout_s,
+                    )
+                response_object.raise_for_status()
+        except httpx.HTTPStatusError as e:
             return HalfResult(
                 success=False,
                 output={
-                    "error": f"rasa HTTP {e.code}",
+                    "error": f"rasa HTTP {e.response.status_code}",
                     "error_code": "SA_EXT_SERVICE_UNAVAILABLE",
                     "booking": booking,
                 },
-                summary=f"rasa returned HTTP {e.code}",
+                summary=f"rasa returned HTTP {e.response.status_code}",
                 next_action="escalate",
             )
-        except URLError as e:
+        except httpx.RequestError as e:
             return HalfResult(
                 success=False,
                 output={
@@ -135,7 +141,7 @@ class RasaStructuredHalf(StructuredHalf):
             )
 
         try:
-            messages = json.loads(raw_response)
+            messages = response_object.json()
         except json.JSONDecodeError:
             return HalfResult(
                 success=False,
@@ -147,17 +153,53 @@ class RasaStructuredHalf(StructuredHalf):
                 next_action="escalate",
             )
 
-        # TODO: Parse the Rasa response array (`messages`).
-        # Loop through `messages`. Look for a 'custom' dict containing 'action' == 'committed' or 'rejected'.
-        # Set `confirmed`, `rejected`, `rejection_reason` and `booking_reference` accordingly.
-        # Note: If action is 'committed', extract 'booking_reference' from 'custom' or text.
-        # If action is 'rejected', extract 'rejection_reason' from 'text'.
-        
-        # TODO: Return the appropriate HalfResult.
-        # - If confirmed and not rejected: success=True, next_action="complete", include booking reference in output.
-        # - If rejected: success=False, next_action="escalate", include reason in output.
-        # - If neither: success=False, next_action="escalate", note unexpected output.
-        raise NotImplementedError("TODO: Parse Rasa response and return HalfResult")
+        try:
+            # Parse the Rasa response array (`messages`).
+            for message in messages:
+                match message:
+                    case {'custom': {'booking_reference': booking_reference}}:
+                        return HalfResult(
+                            success=True,
+                            output={
+                                'committed': True,
+                                'booking': booking,
+                                'booking_reference': booking_reference,
+                                'rasa_response': messages,
+                            },
+                            summary=f'booking confirmed by rasa (ref={booking_reference})',
+                            next_action='complete',
+                        )
+                    case {'action': 'rejected'}:
+                        rejection_reason = message['text']
+                        return HalfResult(
+                            success=False,
+                            output={
+                                'rejected': True,
+                                'reason': rejection_reason,
+                                'rasa_response': messages,
+                                'booking': booking,
+                            },
+                            summary=f'rasa rejected: {rejection_reason}',
+                            next_action='escalate',
+                        )
+
+            return HalfResult(
+                    success=False,
+                    output={
+                        'rasa_response': messages,
+                    },
+                    summary='unexpected output: no action',
+                    next_action='escalate',
+                )
+        except KeyError as error:
+            return HalfResult(
+                success=False,
+                output={
+                    'error': 'rasa returned JSON without necessary fields',
+                },
+                summary=f'rasa response is missing some fields: {error}',
+                next_action='escalate',
+            )
 
 
 # ─────────────────────────────────────────────────────────────────────
