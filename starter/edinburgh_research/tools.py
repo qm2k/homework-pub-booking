@@ -21,10 +21,9 @@ import string
 from pathlib import Path
 
 import more_itertools
-
+from sovereign_agent.errors import ToolError
 from sovereign_agent.session.directory import Session
 from sovereign_agent.tools.registry import ToolRegistry, ToolResult, _RegisteredTool
-from sovereign_agent.errors import ToolError
 
 from .integrity import record_tool_call
 
@@ -37,12 +36,15 @@ _ERR_MISSING = "SA_TOOL_DEPENDENCY_MISSING"
 _ERR_EXECUTION_FAILED = "SA_TOOL_EXECUTION_FAILED"
 _ERR_INVALID_INPUT = "SA_TOOL_INVALID_INPUT"
 
+
 # ---------------------------------------------------------------------------
 # venue_search
 # ---------------------------------------------------------------------------
-def _venue_search_filter(*, venue: dict, near_folded: str, party_size: int, budget_max_gbp: int) -> bool:
+def _venue_search_filter(
+    *, venue: dict, near_folded: str, party_size: int, budget_max_gbp: int
+) -> bool:
     """Evaluate if a venue meets the search criteria.
-    
+
     Checks if the venue is open, located in the specified area (case-insensitive),
     has enough seats, and fits within the given maximum budget.
     """
@@ -74,39 +76,35 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
     check can see what data was produced.
     """
     try:
-        with open(_VENUES_FILE, "r") as file_handle:
+        with open(_VENUES_FILE) as file_handle:
             venues = json.load(file_handle)
 
         # Pre-fold the search string for efficient case-insensitive comparison in the loop
         near_folded = near.casefold()
-        
+
         results = [
-            venue for venue in venues 
+            venue
+            for venue in venues
             if _venue_search_filter(
-                venue=venue, 
-                near_folded=near_folded, 
-                party_size=party_size, 
-                budget_max_gbp=budget_max_gbp
+                venue=venue,
+                near_folded=near_folded,
+                party_size=party_size,
+                budget_max_gbp=budget_max_gbp,
             )
         ]
-        
-        output = dict(
-            near=near,
-            party_size=party_size,
-            results=results,
-            count=len(results)
-        )
-        
+
+        output = dict(near=near, party_size=party_size, results=results, count=len(results))
+
         record_tool_call(
             tool_name="venue_search",
             arguments=dict(near=near, party_size=party_size, budget_max_gbp=budget_max_gbp),
-            output=output
+            output=output,
         )
-        
+
         return ToolResult(
             success=True,
             output=output,
-            summary=f"venue_search(near={near!r}, party_size={party_size}, budget_max_gbp={budget_max_gbp}): {len(results)} result(s)"
+            summary=f"venue_search(near={near!r}, party_size={party_size}, budget_max_gbp={budget_max_gbp}): {len(results)} result(s)",
         )
     except FileNotFoundError as exception:
         raise ToolError(_ERR_MISSING, message=str(exception)) from exception
@@ -119,45 +117,42 @@ def venue_search(near: str, party_size: int, budget_max_gbp: int = 1000) -> Tool
 # ---------------------------------------------------------------------------
 def _get_weather_impl(*, city: str, date: str) -> ToolResult:
     """Implement weather lookup logic with early error returns."""
-    with open(_WEATHER_FILE, "r") as file_handle:
+    with open(_WEATHER_FILE) as file_handle:
         weather_data = json.load(file_handle)
-        
+
     city_folded = city.casefold()
-    
+
     if city_folded not in weather_data:
         return ToolResult(
             success=False,
             output=dict(error="City not found", city=city),
             summary=f"get_weather(city={city!r}, date={date!r}): City not found",
-            error=ToolError(_ERR_INVALID_INPUT, message="City not found")
+            error=ToolError(_ERR_INVALID_INPUT, message="City not found"),
         )
-        
+
     city_weather = weather_data[city_folded]
-    
+
     if date not in city_weather:
         return ToolResult(
             success=False,
             output=dict(error="Date not found", city=city, date=date),
             summary=f"get_weather(city={city!r}, date={date!r}): Date not found",
-            error=ToolError(_ERR_INVALID_INPUT, message="Date not found")
+            error=ToolError(_ERR_INVALID_INPUT, message="Date not found"),
         )
-        
+
     day_weather = city_weather[date]
-    
-    output = dict(
-        city=city,
-        date=date,
-        **day_weather
-    )
-    
+
+    output = dict(city=city, date=date, **day_weather)
+
     condition = day_weather["condition"]
     temperature_c = day_weather["temperature_c"]
-    
+
     return ToolResult(
         success=True,
         output=output,
-        summary=f"get_weather(city={city!r}, date={date!r}): {condition}, {temperature_c}C"
+        summary=f"get_weather(city={city!r}, date={date!r}): {condition}, {temperature_c}C",
     )
+
 
 def get_weather(city: str, date: str) -> ToolResult:
     """Look up the scripted weather for <city> on <date> (YYYY-MM-DD).
@@ -173,13 +168,11 @@ def get_weather(city: str, date: str) -> ToolResult:
     """
     try:
         result = _get_weather_impl(city=city, date=date)
-        
+
         record_tool_call(
-            tool_name="get_weather",
-            arguments=dict(city=city, date=date),
-            output=result.output
+            tool_name="get_weather", arguments=dict(city=city, date=date), output=result.output
         )
-        
+
         return result
     except FileNotFoundError as exception:
         raise ToolError(_ERR_MISSING, message=str(exception)) from exception
@@ -219,21 +212,17 @@ def _calculate_deposit_required(*, total: float, deposit_policy: dict) -> float:
 
 
 def _calculate_cost_impl(
-    *,
-    venue_id: str,
-    party_size: int,
-    duration_hours: int,
-    catering_tier: str
+    *, venue_id: str, party_size: int, duration_hours: int, catering_tier: str
 ) -> ToolResult:
     """Implement cost calculation logic.
-    
+
     Raises ValueError if venue_id is not found, KeyError if catering_tier
     is invalid. These are caught by the wrapper and converted to SA_TOOL_INVALID_INPUT.
     """
-    with open(_CATERING_FILE, "r") as file_handle:
+    with open(_CATERING_FILE) as file_handle:
         catering_data = json.load(file_handle)
 
-    with open(_VENUES_FILE, "r") as file_handle:
+    with open(_VENUES_FILE) as file_handle:
         venues_data = json.load(file_handle)
 
     # Use more_itertools.one to ensure exactly one venue matches; raises ValueError otherwise
@@ -242,23 +231,20 @@ def _calculate_cost_impl(
     base_rates = catering_data["base_rates_gbp_per_head"]
     # Raises KeyError if catering_tier is not valid
     base_per_head = base_rates[catering_tier]
-        
+
     # Assume 1.0 multiplier if venue not explicitly listed in modifiers
     venue_mult = catering_data["venue_modifiers"].get(venue_id, 1.0)
-    
+
     subtotal = base_per_head * venue_mult * party_size * max(1, duration_hours)
     service = subtotal * catering_data["service_charge_percent"] / 100
-    
+
     hire_fee = venue["hire_fee_gbp"]
     min_spend = venue["min_spend_gbp"]
-    
+
     total = subtotal + service + hire_fee + min_spend
-    
+
     deposit_policy = catering_data["deposit_policy"]
-    deposit_required = _calculate_deposit_required(
-        total=total, 
-        deposit_policy=deposit_policy
-    )
+    deposit_required = _calculate_deposit_required(total=total, deposit_policy=deposit_policy)
 
     # Use math.ceil to round up unrounded values at the very end
     total_int = math.ceil(total)
@@ -276,11 +262,11 @@ def _calculate_cost_impl(
         total_gbp=total_int,
         deposit_required_gbp=deposit_required_int,
     )
-    
+
     return ToolResult(
         success=True,
         output=output,
-        summary=f"calculate_cost(venue_id={venue_id!r}, party_size={party_size}, duration_hours={duration_hours}, catering_tier={catering_tier!r}): total £{total_int}, deposit £{deposit_required_int}"
+        summary=f"calculate_cost(venue_id={venue_id!r}, party_size={party_size}, duration_hours={duration_hours}, catering_tier={catering_tier!r}): total £{total_int}, deposit £{deposit_required_int}",
     )
 
 
@@ -320,20 +306,20 @@ def calculate_cost(
             venue_id=venue_id,
             party_size=party_size,
             duration_hours=duration_hours,
-            catering_tier=catering_tier
+            catering_tier=catering_tier,
         )
-        
+
         record_tool_call(
             tool_name="calculate_cost",
             arguments=dict(
                 venue_id=venue_id,
                 party_size=party_size,
                 duration_hours=duration_hours,
-                catering_tier=catering_tier
+                catering_tier=catering_tier,
             ),
-            output=result.output
+            output=result.output,
         )
-        
+
         return result
     except (ValueError, KeyError) as exception:
         # Invalid venue_id or catering_tier mapped to specific invalid input error
@@ -370,38 +356,32 @@ def generate_flyer(session: Session, event_details: dict) -> ToolResult:
     because it writes a file.
     """
     try:
-        escaped_details = {
-            key: html.escape(str(value)) 
-            for key, value in event_details.items()
-        }
+        escaped_details = {key: html.escape(str(value)) for key, value in event_details.items()}
 
         template_content = _FLYER_TEMPLATE.read_text(encoding="utf-8")
         html_content = string.Template(template_content).substitute(escaped_details)
 
         flyer_path = session.workspace_dir / "flyer.html"
         flyer_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         flyer_path.write_text(html_content, encoding="utf-8")
         bytes_written = flyer_path.stat().st_size
-            
-        output = dict(
-            path=str(flyer_path),
-            bytes_written=bytes_written
-        )
+
+        output = dict(path=str(flyer_path), bytes_written=bytes_written)
 
         record_tool_call(
-            tool_name="generate_flyer",
-            arguments=dict(event_details=event_details),
-            output=output
+            tool_name="generate_flyer", arguments=dict(event_details=event_details), output=output
         )
-        
+
         return ToolResult(
             success=True,
             output=output,
-            summary=f"generate_flyer: wrote {flyer_path} ({bytes_written} bytes)"
+            summary=f"generate_flyer: wrote {flyer_path} ({bytes_written} bytes)",
         )
     except KeyError as exception:
-        raise ToolError(_ERR_EXECUTION_FAILED, message=f"Missing key in event_details: {exception}") from exception
+        raise ToolError(
+            _ERR_EXECUTION_FAILED, message=f"Missing key in event_details: {exception}"
+        ) from exception
     except FileNotFoundError as exception:
         raise ToolError(_ERR_MISSING, message=str(exception)) from exception
     except Exception as exception:
@@ -421,6 +401,7 @@ def build_tool_registry(session: Session, include_builtins: bool = True) -> Tool
     """
     if include_builtins:
         from sovereign_agent.tools.builtin import make_builtin_registry
+
         reg = make_builtin_registry(session)
     else:
         reg = ToolRegistry()
@@ -436,7 +417,7 @@ def build_tool_registry(session: Session, include_builtins: bool = True) -> Tool
                 "properties": {
                     "near": {
                         "type": "string",
-                        "description": "Keyword search for the area (e.g., 'Haymarket'). Performs a strict substring match. Do not include full phrases or extra words like 'station'."
+                        "description": "Keyword search for the area (e.g., 'Haymarket'). Performs a strict substring match. Do not include full phrases or extra words like 'station'.",
                     },
                     "party_size": {"type": "integer"},
                     "budget_max_gbp": {"type": "integer", "default": 1000},
@@ -543,9 +524,16 @@ def build_tool_registry(session: Session, include_builtins: bool = True) -> Tool
                             "deposit_required_gbp": {"type": "number"},
                         },
                         "required": [
-                            "venue_name", "venue_address", "date", "time", "party_size",
-                            "condition", "temperature_c", "total_gbp", "deposit_required_gbp"
-                        ]
+                            "venue_name",
+                            "venue_address",
+                            "date",
+                            "time",
+                            "party_size",
+                            "condition",
+                            "temperature_c",
+                            "total_gbp",
+                            "deposit_required_gbp",
+                        ],
                     }
                 },
                 "required": ["event_details"],

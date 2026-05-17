@@ -106,7 +106,9 @@ def test_tools_module_registers_four_tools() -> None:
 def test_tools_module_can_exclude_builtins() -> None:
     """build_tool_registry(include_builtins=False) must omit builtins."""
     import tempfile
+
     from sovereign_agent.session.directory import create_session
+
     from starter.edinburgh_research.tools import build_tool_registry
 
     with tempfile.TemporaryDirectory() as td:

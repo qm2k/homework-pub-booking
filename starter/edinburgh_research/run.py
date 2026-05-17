@@ -24,9 +24,6 @@ from sovereign_agent._internal.llm_client import (
     ToolCall,
 )
 from sovereign_agent._internal.paths import example_sessions_dir
-from sovereign_agent.executor import DefaultExecutor
-from sovereign_agent.halves.loop import LoopHalf
-from sovereign_agent.planner import DefaultPlanner
 from sovereign_agent.session.directory import create_session
 from sovereign_agent.tickets.ticket import list_tickets
 
@@ -258,7 +255,7 @@ async def run_scenario(real: bool) -> int:
             extra_tools=extra_tools,
         )
         await orchestrator.process_session(session.session_id)
-        
+
         session.reload_state()
         print(f"\nOrchestrator pass complete. Session state: {session.state.state}")
 
