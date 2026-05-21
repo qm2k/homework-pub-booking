@@ -1,0 +1,11 @@
+[
+  {
+    "id": "sg_1",
+    "description": "Search for a pub near Haymarket station for 6 people on 2026-04-25 at 19:30 with max budget \u00a3800, check Edinburgh weather for 2026-04-25, calculate cost for 3 hours with bar snacks, generate HTML flyer, and complete task.",
+    "success_criterion": "workspace/flyer.html exists in the workspace",
+    "estimated_tool_calls": 5,
+    "depends_on": [],
+    "assigned_half": "loop",
+    "status": "pending"
+  }
+]
