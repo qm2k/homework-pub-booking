@@ -1,8 +1,23 @@
 # Ex9 — Reflection
 
+Answer all three questions. The grader expects every question to be answered;
+blank answers are zero.
+
+---
+
 ## Q1 — Planner handoff decision
 
+### Prompt
+
+Find a point in your Ex7 logs where the planner decided to hand off to the
+structured half. Quote the planner's reasoning or the specific subgoal's
+`assigned_half` field. What signal caused the decision?
+
+**Word count:** 100-250 words.
+
 ### Your answer
+
+*(Write your answer below this line.)*
 
 In my Exercise 7 trace, the deterministic loop planner (via `FakeLLMClient`)
 assigned the venue search subgoal with the field `assigned_half: "loop"`.
@@ -16,7 +31,7 @@ candidate venue (`Haymarket Tap`) that met the initial criteria, which then
 required Rasa to validate the booking against strict business policies (e.g.,
 party size caps).
 
-### Citation
+### Citation (required)
 
 Trace from session `sess_a6f62ecbf5e0`:
 ```json
@@ -40,7 +55,19 @@ And from `run.py` plan:
 
 ## Q2 — Dataflow integrity catch
 
+### Prompt
+
+Describe one instance where your Ex5 dataflow integrity check caught something
+manual inspection would have missed, OR (if the check never triggered in your
+runs) describe a plausible scenario where it WOULD catch a failure. Your
+scenario must be specific enough that someone else could construct the test
+case.
+
+**Word count:** 100-250 words.
+
 ### Your answer
+
+*(Write your answer below this line.)*
 
 A plausible scenario where the Ex5 dataflow integrity check (`ex5_integrity`)
 would catch a failure that a human reviewer would miss is an LLM hallucination
@@ -74,7 +101,7 @@ better than nothing, everything we can deterministically check we could also
 deterministically fill not relying on the model. In a sense relying on the
 model for passing details between deterministic tool calls seems redundant.
 
-### Citation
+### Citation (required)
 
 Plausible test case:
 
@@ -87,9 +114,25 @@ Plausible test case:
 
 ---
 
-## Q3 — Removing one framework primitive
+## Q3 — First production failure + primitive
+
+### Prompt
+
+If you were shipping this agent to a real pub-booking business next week,
+what's the first production failure you'd expect, and which sovereign-agent
+primitive (ticket state machine, manifest discipline, IPC atomic rename,
+SessionQueue retry, drift-corrected scheduler, mount allowlist, HITL approval,
+etc.) would surface it?
+
+Name EXACTLY ONE primitive and EXACTLY ONE failure mode. Vague answers that
+name multiple primitives or generic "something will break" failures lose
+points.
+
+**Word count:** 100-250 words.
 
 ### Your answer
+
+*(Write your answer below this line.)*
 
 If I were shipping this to a real pub-booking business, the first production
 failure I'd expect is the LLM entering an infinite ReAct loop—for example,
@@ -106,7 +149,7 @@ state machine will halt execution and transition the subgoal's status to
 `failed`, surfacing the failure to the planner or bridge for appropriate
 recovery.
 
-### Citation
+### Citation (optional but encouraged)
 
 Reference: `docs/real-mode-failures.md` (Section: Ex5 — Qwen3-32B spiral on
 venue_search) and Sovereign-Agent Architecture (Ticket execution limits).
