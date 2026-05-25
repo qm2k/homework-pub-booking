@@ -241,7 +241,7 @@ def _calculate_cost_impl(
     hire_fee = venue["hire_fee_gbp"]
     min_spend = venue["min_spend_gbp"]
 
-    total = subtotal + service + hire_fee + min_spend
+    total = max(subtotal, min_spend) + service + hire_fee
 
     deposit_policy = catering_data["deposit_policy"]
     deposit_required = _calculate_deposit_required(total=total, deposit_policy=deposit_policy)
