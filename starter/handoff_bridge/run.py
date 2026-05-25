@@ -117,6 +117,52 @@ def _build_fake_client_two_rounds() -> FakeLLMClient:
                     )
                 ]
             ),
+            # === ROUND 3 (if Rasa fails in real mode) ===
+            ScriptedResponse(content=plan_r2),
+            ScriptedResponse(
+                tool_calls=[
+                    ToolCall(
+                        id="c5",
+                        name="handoff_to_structured",
+                        arguments={
+                            "reason": "fallback retry",
+                            "context": "retry",
+                            "data": {
+                                "action": "confirm_booking",
+                                "venue_id": "The Royal Oak",
+                                "date": "2026-04-25",
+                                "time": "19:30",
+                                "party_size": "6",
+                                "deposit": "£0",
+                            },
+                        },
+                    )
+                ]
+            ),
+            # === ROUND 4 (if Rasa fails again) ===
+            ScriptedResponse(content=plan_r2),
+            ScriptedResponse(
+                tool_calls=[
+                    ToolCall(
+                        id="c6",
+                        name="handoff_to_structured",
+                        arguments={
+                            "reason": "fallback retry",
+                            "context": "retry",
+                            "data": {
+                                "action": "confirm_booking",
+                                "venue_id": "The Royal Oak",
+                                "date": "2026-04-25",
+                                "time": "19:30",
+                                "party_size": "6",
+                                "deposit": "£0",
+                            },
+                        },
+                    )
+                ]
+            ),
+            ScriptedResponse(content="Task completed."),
+            ScriptedResponse(content="Task completed."),
         ]
     )
 
