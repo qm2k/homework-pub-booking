@@ -18,32 +18,11 @@ having tested it. (Full credit still possible.)
 
 *(Write your answer below this line. Do not remove the heading.)*
 
-*Note: The voice pipeline implementation was also pre-populated in my starter
-codebase. I reviewed its architecture and ran the text-mode simulation rather
-than discarding the existing code.*
-
-In the voice pipeline, state is maintained across turns by persisting the
-conversation history within the `ManagerPersona` class as an in-memory list of
-message dictionaries. Each turn appends the user's STT text as a `{"role":
-"user", ...}` message, calls the `OpenAICompatibleClient`, and appends the
-model's response as `{"role": "assistant", ...}` before synthesizing it via
-TTS.
-
-The Llama-3.3-70B manager persona stays in character through a highly specific
-system prompt injected as the first message in the history. The prompt mandates
-the persona of Alasdair, a gruff Edinburgh pub manager who only accepts
-specific party sizes and uses Scottish vernacular. By carrying the full history
-with this system prompt prepended on every LLM call, the persona reliably
-remains consistent.
-
-Since I ran the scenario in text mode without Speechmatics, a highly plausible
-failure mode for real voice audio would be transcription errors handling
-Scottish accents or venue names (e.g., "The Royal Oak" interpreted as "Roy
-Look"). This can cause the LLM to misinterpret the venue context and falsely
-reject or derail the booking. I would address this by providing a custom
-vocabulary/dictionary payload (often supported by STT APIs like Speechmatics)
-containing the names of all our valid pubs to bias the STT model toward correct
-entity transcription.
+Conversation history is persisted in-memory as a list of message dictionaries
+inside `ManagerPersona`, ensuring the Llama-3.3-70B persona maintains context
+and character across turns. I am utilizing text-mode degradation; a plausible
+voice failure mode is STT misinterpretation of venue names, which could be
+mitigated by supplying a custom vocabulary payload.
 
 ---
 

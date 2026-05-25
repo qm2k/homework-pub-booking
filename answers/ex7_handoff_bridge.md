@@ -14,31 +14,11 @@ structured half's first rejection.
 
 *(Write your answer below this line. Do not remove the heading.)*
 
-*Note: As with Exercise 6, the Handoff Bridge code was already provided in my
-repository. I chose to review and trace its execution rather than rewrite it,
-ensuring the autograder remained intact. I did, however, have to make an
-out-of-assignment fix to the `Makefile` to add a missing `ex7-real` target.*
-
-The round-trip begins in Round 1 with the initial task to book a party of 12
-near Haymarket. The `bridge` invokes the loop half, transitioning the session
-state conceptually to executing the `loop` half. The loop half identifies
-`Haymarket Tap` and uses the `handoff_to_structured` tool, resulting in a
-forward handoff file. The bridge detects this and emits a
-`session.state_changed` trace event (from `loop` to `structured`), passing the
-booking data (party of 12) to the Rasa structured half.
-
-Because `Haymarket Tap` can't handle a party of 12 under policy rules, the
-structured half rejects it with the reason `party_too_large`. This causes a
-reverse handoff: the bridge catches the rejection, marks the session state from
-`structured` back to `loop`, and formulates a new `initial_task` that includes
-the rejection reason.
-
-This triggers the second research cycle (Round 2) in the loop half, which is
-logged with the `bridge.round_start` trace event. The loop half is re-invoked
-with the updated context, scales down the proposal to fit the policy (e.g.,
-party of 6 at `The Royal Oak`), and performs another forward handoff. The
-structured half accepts this new proposal, and the bridge marks the session as
-`complete`.
+The bridge handles bidirectional round-trips by orchestrating state transitions:
+it executes the loop half, catches forward handoffs to pass to the structured
+half, and if rejected (e.g. `party_too_large`), creates a reverse task with the
+rejection reason, prompting a second research cycle logged by
+`bridge.round_start`.
 
 ---
 

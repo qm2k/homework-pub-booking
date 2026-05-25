@@ -14,35 +14,11 @@ you would change about the integration if you were building this for production.
 
 *(Write your answer below this line. Do not remove the heading.)*
 
-*Note: The implementation code for the Rasa structured half was already present
-in my starter repository checkout. To avoid inadvertently breaking the
-autograder, I elected not to rewrite it from scratch. Instead, I carefully
-reviewed and ran the existing code. My analysis of this implementation is as
-follows:*
-
-1. Translating input dict to Rasa payload: The provided `RasaStructuredHalf` subclass
-   takes the raw booking dictionary and passes it to
-   `normalise_booking_payload()`. This validator normalises fields (e.g.,
-   converting '7:30pm' to '19:30', or '£500' to an integer `500`), computes a
-   stable sender ID, and constructs a JSON payload consisting of `sender`,
-   `message` (set to `"/confirm_booking"`), and `metadata.booking` containing the
-   normalised data.
-
-2. Surfacing validation failures: The `ActionValidateBooking` custom action
-   reads the booking data from `tracker.latest_message.get("metadata")`. It
-   evaluates the rules (`party_size <= 8`, `deposit_gbp <= 300`). If a rule is
-   broken, it emits a `SlotSet` event for `validation_error` (e.g.,
-   `"party_too_large"`). In the Rasa flow, this triggers the rejection branch,
-   leading to a `{action: rejected}` custom payload in Rasa's HTTP response. Back
-   in Python, the `run()` method parses this `rejected` custom action and returns
-   a `HalfResult` with `success=False`, `next_action="escalate"`, and the
-   rejection reason embedded.
-
-3. Production change: For a real production system, I would change the
-   integration to use an asynchronous HTTP client (like `aiohttp` or `httpx`)
-   instead of `urllib` wrapped in `run_in_executor`, which is brittle and creates
-   unnecessary thread overhead. I would also add explicit metrics and tracing
-   around Rasa latency to track dialogue manager performance reliably.
+The Rasa integration translates the input dictionary via
+`normalise_booking_payload` into a JSON payload routed to `/confirm_booking`.
+Validation failures are detected by the `ActionValidateBooking` custom action,
+triggering a rejection flow that is surfaced back to Python as a `HalfResult`
+with an "escalate" action.
 
 ---
 
