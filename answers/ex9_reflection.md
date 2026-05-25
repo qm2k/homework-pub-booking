@@ -69,47 +69,37 @@ case.
 
 *(Write your answer below this line.)*
 
-A plausible scenario where the Ex5 dataflow integrity check (`ex5_integrity`)
-would catch a failure that a human reviewer would miss is an LLM hallucination
-of specific data values. Suppose Qwen3-32B successfully searches for a venue
-and the tool returns "The Royal Oak" with a capacity of 16. However, the
-original user request was for a party of 12. During the `generate_flyer` tool
-call, the LLM hallucinates and passes `"capacity": 12` instead of the actual
-`"capacity": 16` returned by the API. Alternatively, it might hallucinate a
-temperature of `20°C` instead of the actual `15°C` returned by the
-`get_weather` tool. 
+The Ex5 dataflow integrity check initially suffered from a "circular
+self-confirmation" flaw (self-verifying validation). Before it was corrected,
+the check scanned both the `output` and the `arguments` of all recorded tool
+calls to verify facts present in the flyer. 
 
-A human reviewer inspecting the resulting `flyer.html` would see "15°C" and
-"Capacity: 12" and assume the flyer is perfectly plausible, completely missing
-that the data was fabricated by the LLM. The dataflow integrity check catches
-this immediately because it tracks the actual outputs from `_TOOL_CALL_LOG` and
-verifies that the exact values returned by the tools are the ones present in
-the final flyer payload.
+Because the `generate_flyer` tool logs its own arguments (which contain the very
+facts the LLM decided to put in the flyer), any hallucinated fact passed to
+`generate_flyer` would vacuously validate itself. The validator was merely
+confirming that the artifact contained the values it wrote, rather than checking
+against an independent source of truth (the actual outputs of the upstream
+research tools).
 
-In fact, the dataflow integrity check actually caught errors from the
-deterministic fake model immediately after small bugs in the integrity check
-itself were fixed (commit `a79d221`). Previously, the check erroneously
-included the `generate_flyer` tool's own arguments when searching for valid
-facts, meaning any hallucinated fact passed to `generate_flyer` would vacuously
-validate itself. Once the check was fixed to only scan the *outputs* of *other*
-tools, it immediately caught that the fake model's scripted responses were
-inconsistent (the script called `calculate_cost` for 5 people yielding £497,
-but called `generate_flyer` for 6 people and £540).
-
-I must note that while catching hallucinations the way suggested in the code is
-better than nothing, everything we can deterministically check we could also
-deterministically fill not relying on the model. In a sense relying on the
-model for passing details between deterministic tool calls seems redundant.
+Manual inspection of the `flyer.html` completely misses this because the flyer
+looks perfectly plausible (e.g., claiming a total cost of £540). The integrity
+check, in its broken state, also missed it because it found `540` in the
+`generate_flyer` argument log. It was only after modifying
+`fact_appears_in_log` to exclusively scan the `output` fields of prior tools
+that the validator successfully caught the inconsistency between the research
+outputs and the generated artifact. The architectural lesson is clear: if your
+validator and agent share state, you don't have validation.
 
 ### Citation (required)
 
-Plausible test case:
+Plausible test case (Circular Self-Confirmation):
 
-1. `get_weather` tool returns `{"temperature_c": 15}`.
-2. LLM calls `generate_flyer` with `{"event_details": {"temperature_c": 20}}`.
-3. `ex5_integrity` check fails at: `assert value in [call.output for call in
-   _TOOL_CALL_LOG]`, raising `SA_INTEGRITY_VIOLATION` because `20` was never
-   returned by any tool.
+1. `calculate_cost` outputs `{"total_gbp": 497}`.
+2. LLM hallucinates and calls `generate_flyer` with `{"total_gbp": 540}`.
+3. If `integrity.py` checks tool arguments, `540` is found in `generate_flyer`'s
+   own log, and the check falsely passes.
+4. Once fixed to only check `record.output`, the check correctly raises
+   `SA_INTEGRITY_VIOLATION` because `540` was never an upstream output.
 
 
 ---
