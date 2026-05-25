@@ -341,7 +341,7 @@ async def _transcribe_speechmatics(
 async def _speak_rime(text: str, api_key: str, sd) -> None:
     """Call Rime.ai TTS, get MP3 back, play it."""
     import httpx
-    
+
     url = "https://users.rime.ai/v1/rime-tts"
     payload = {
         "speaker": "luna",  # an Arcana voice; change if Rime renames
@@ -355,12 +355,13 @@ async def _speak_rime(text: str, api_key: str, sd) -> None:
         "Accept": "audio/mp3",
     }
 
-    # TODO: Make an async HTTP POST request using `httpx.AsyncClient` to `url` with `payload` as JSON and `headers`.
+    # Make an async HTTP POST request using `httpx.AsyncClient` to `url` with `payload` as JSON and `headers`.
     # Check for status_code == 200, and raise RuntimeError with the response text if it fails.
     # Assign the raw bytes to `mp3_bytes`.
-    raise NotImplementedError("TODO: Implement async HTTP POST for Rime TTS")
-    
-    # mp3_bytes = <your variable>
+    async with httpx.AsyncClient() as http_client:
+        response_object = await http_client.post(url, json=payload, headers=headers)
+        response_object.raise_for_status()
+        mp3_bytes = response_object.content
 
     # Decode MP3 → PCM via pydub (stdlib can't handle mp3)
     try:
